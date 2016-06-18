@@ -1,0 +1,49 @@
+#!/usr/bin/python3
+import argparse
+import subprocess
+import os
+import stat
+import math
+import sys
+import hurry.filesize
+
+def err_print(*args, **kwargs):
+    """Behaves exactly like print, except writes to stderr instead of stdout."""
+    print(*args, file=sys.stderr, **kwargs)
+
+def main():
+    # parse command line arguments
+    parser = argparse.ArgumentParser(description="Get the total size of files installed as part of pacman packages.",
+        add_help=False)
+    parser.add_argument("package", type=str, nargs="*", help="package to retrieve storage size for")
+    parser.add_argument("-h", dest="human_readable", action="store_const", const=True, default=False,
+        help="print sizes in human readable format (e.g., 1K 234M 2G)")
+    parser.add_argument("--help", action="help", help="show this help page")
+    args = parser.parse_args()
+
+    # get list of files from pacman
+    result = subprocess.run(["pacman", "-Qlq"] + args.package, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True)
+    if result.returncode != 0:
+        err_print(result.stderr)
+        exit(result.returncode)
+
+    # stat each path, add size in bytes if regular file
+    size = 0
+    for path in result.stdout.strip().split("\n"):
+        try:
+            s = os.stat(path, follow_symlinks=False)
+        except OSError as e:
+            err_print("{}: {}".format(path, e.strerror))
+            continue
+        if stat.S_ISREG(s.st_mode):
+            size += s.st_size
+
+    if args.human_readable:
+        out_str = hurry.filesize.size(size)
+    else:
+        out_str = str(size)
+    print(out_str)
+
+if __name__ == "__main__":
+    main()
